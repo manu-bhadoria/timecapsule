@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@certusone/wormhole-sdk": "^0.10.7",
+    "@truffle/hdwallet-provider": "^2.1.15",
+    "dotenv": "^16.3.1"
+  }
+}

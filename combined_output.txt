@@ -1,0 +1,636 @@
+1. /home/meo/projects/TimeCapsulesProject/frontend/src/App.css
+.App {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  background-color: black; /* Set background to black */
+  color: white; /* Set text color to white */
+  font-family: 'Press Start 2P', cursive; /* Example font for a sci-fi theme */
+}
+
+#starfield {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+--------------
+2. /home/meo/projects/TimeCapsulesProject/frontend/src/.env
+ETH_RPC_URL=https://sepolia.infura.io/v3/c6d02468423647ee9a59637665f9969d
+TIME_CAPSULE_CONTRACT_ADDRESS=0x81DCE163e2b357792b50Ff2c0B294287B6a8a866
+EMITTER_ADDRESS=0xd272a962FaDf77cbf2253A255eB94BB5aa77C38A
+--------------
+3. /home/meo/projects/TimeCapsulesProject/frontend/src/App.js
+import './Starfield.css';
+import React, { useState } from 'react';
+import CreateCapsule from './components/CreateCapsule';
+import ViewCapsules from './components/ViewCapsules';
+import { web3, timeCapsuleContract } from './web3Setup'; // Adjust the path as necessary
+import Web3 from 'web3';
+import initStarfield from './Starfield';
+import './Starfield.css';
+import './App.css'
+
+
+
+const wormholeGuardianNetwork = process.env.REACT_APP_WORMHOLE_GUARDIAN_NETWORK;
+const ethereumRpcUrl = process.env.REACT_APP_ETHEREUM_RPC_URL;
+const arbitrumRpcUrl = process.env.REACT_APP_ARBITRUM_RPC_URL;
+
+
+
+function App() {
+  React.useEffect(() => {
+    initStarfield();
+  }, []);
+  const [account, setAccount] = useState(null);
+
+  const connectWalletHandler = async () => {
+    if (window.ethereum) {
+      const web3 = new Web3(window.ethereum);
+      try {
+        await window.ethereum.enable(); // Request account access
+        const accounts = await web3.eth.getAccounts();
+        setAccount(accounts[0]);
+      } catch (error) {
+        console.error("Failed to enable Ethereum.");
+      }
+    } else {
+      alert("Please install MetaMask!");
+    }
+  };
+  const createCapsule = async (message, unlockTime) => {
+    try {
+      const accounts = await web3.eth.getAccounts();
+      await timeCapsuleContract.methods.createCapsule(message, unlockTime).send({ from: accounts[0] });
+      console.log('Capsule created successfully');
+    } catch (error) {
+      console.error('Error creating capsule:', error);
+    }
+  };
+  const getCapsules = async () => {
+    try {
+      const accounts = await web3.eth.getAccounts();
+      const capsules = await timeCapsuleContract.methods.getCapsules().call({ from: accounts[0] });
+      console.log('Capsules fetched successfully:', capsules);
+      return capsules;
+    } catch (error) {
+      console.error('Error fetching capsules:', error);
+      return [];
+    }
+  };
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Time Capsule DApp</h1>
+        <button onClick={connectWalletHandler}>Connect Wallet</button>
+        {account && <p>Connected Account: {account}</p>}
+      </header>
+      <CreateCapsule createCapsule={createCapsule} />
+      <ViewCapsules getCapsules={getCapsules} />
+    </div>
+  );
+}
+
+export default App;
+
+--------------
+4. /home/meo/projects/TimeCapsulesProject/frontend/src/listener.js
+require('dotenv').config();
+const Web3 = require('web3');
+const { getSignedVAA } = require('@certusone/wormhole-sdk');
+const timeCapsuleContractAddress = process.env.TIME_CAPSULE_CONTRACT_ADDRESS;
+
+
+// Initialize Web3
+const web3 = new Web3(process.env.ETH_RPC_URL);
+// Define the ABI for the event
+const timeCapsuleAbi = [
+    // Add only the relevant part of the ABI here
+    {
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "internalType": "uint256", "name": "unlockTime", "type": "uint256"},
+            {"indexed": true, "internalType": "address", "name": "recipient", "type": "address"},
+            {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "name": "WormholeMessage",
+        "type": "event"
+    }
+];
+
+// Create a contract instance
+const timeCapsuleContract = new web3.eth.Contract(timeCapsuleAbi, timeCapsuleContractAddress);
+const wormholeRpcHost = 'https://api.testnet.wormholescan.io'; // Example for testnet
+const chainId = 11155111; // Replace with the correct chain ID for Ethereum
+const emitterAddress = process.env.EMITTER_ADDRESS;
+
+// Event listener
+timeCapsuleContract.events.WormholeMessage({
+    fromBlock: 'latest'
+}, async (error, event) => {
+    if (error) {
+        console.error('Error on event', error);
+        return;
+    }
+
+    console.log('Event received:', event);
+
+    // Logic to handle the event and create a Wormhole message
+    const { unlockTime, recipient, amount } = event.returnValues;
+    const sequence = event.returnValues.sequence; // Assuming this is part of your event data
+
+    // Here, you would use the Wormhole SDK to create and send a message
+    // This is a placeholder for where you'd implement the SDK logic
+    try {
+        const signedVAA = await getSignedVAA(wormholeRpcHost, chainId, emitterAddress, sequence);
+        // Further logic to handle the signed VAA
+        console.log('Signed VAA:', signedVAA);
+
+    } catch (sdkError) {
+        console.error('Error using Wormhole SDK:', sdkError);
+    }
+});
+
+console.log('Listening for WormholeMessage events...');
+
+--------------
+5. /home/meo/projects/TimeCapsulesProject/frontend/src/web3Setup.js
+import Web3 from 'web3';
+import TimeCapsuleContract from './TimeCapsule.json';
+import EthTimeCapsuleContract from './EthTimeCapsule.json';
+
+
+// Your Contract ABI and Address
+const timeCapsuleABI = [{
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "message",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "unlockTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "CapsuleCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "CapsuleUnlocked",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_message",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_unlockTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "createCapsule",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      }
+    ],
+    "name": "unlockCapsule",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      }
+    ],
+    "name": "getCapsule",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "constant": true
+  },
+  {
+    "inputs": [],
+    "name": "getCapsules",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "message",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "unlockTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isUnlocked",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct TimeCapsule.Capsule[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function",
+    "constant": true
+  }];
+const timeCapsuleAddress = '0x28F1F0114E71d247691837c49693D6A85CB8a268';
+
+// Initialize web3 and the contract instance
+const web3 = new Web3(window.ethereum);
+const timeCapsuleContract = new web3.eth.Contract(timeCapsuleABI, timeCapsuleAddress);
+
+const networkId = await web3.eth.net.getId();
+
+const TimeCapsule = new web3.eth.Contract(timeCapsuleABI, timeCapsuleAddress);
+
+
+const EthTimeCapsule = new web3.eth.Contract(
+    EthTimeCapsuleContract.abi,
+    EthTimeCapsuleContract.networks[networkId] && EthTimeCapsuleContract.networks[networkId].address,
+);
+export { web3, timeCapsuleContract, EthTimeCapsule, TimeCapsule };
+--------------
+6. /home/meo/projects/TimeCapsulesProject/frontend/src/index.js
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+
+--------------
+7. /home/meo/projects/TimeCapsulesProject/frontend/src/Starfield.js
+// Starfield.js
+
+export default function initStarfield() {
+    const canvas = document.createElement('canvas');
+    canvas.id = 'starfield';
+    document.body.appendChild(canvas);
+
+    const ctx = canvas.getContext('2d');
+    const stars = [];
+
+    function createStar() {
+        return {
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            radius: Math.random() * 1.5,
+            twinkle: Math.random() > 0.5
+        };
+    }
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        stars.length = 0; // Clear the stars array
+        for (let i = 0; i < 100; i++) {
+            stars.push(createStar());
+        }
+    }
+
+    function drawStars() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#FFFFFF';
+        stars.forEach(star => {
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Twinkle effect
+            if (star.twinkle) {
+                star.radius += Math.random() > 0.5 ? 0.2 : -0.2;
+                if (star.radius < 0.5) {
+                    star.radius = 0.5;
+                    star.twinkle = false;
+                } else if (star.radius > 1.5) {
+                    star.radius = 1.5;
+                    star.twinkle = false;
+                }
+            } else {
+                // Randomly start twinkling
+                star.twinkle = Math.random() > 0.99;
+            }
+        });
+    }
+
+    function animate() {
+        drawStars();
+        requestAnimationFrame(animate); // Call the next frame
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    animate(); // Start the animation
+}
+
+--------------
+8. /home/meo/projects/TimeCapsulesProject/frontend/src/index.css
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+--------------
+9. /home/meo/projects/TimeCapsulesProject/frontend/src/Starfield.css
+#starfield {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+--------------
+10. /home/meo/projects/TimeCapsulesProject/frontend/src/reportWebVitals.js
+const reportWebVitals = onPerfEntry => {
+  if (onPerfEntry && onPerfEntry instanceof Function) {
+    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      getCLS(onPerfEntry);
+      getFID(onPerfEntry);
+      getFCP(onPerfEntry);
+      getLCP(onPerfEntry);
+      getTTFB(onPerfEntry);
+    });
+  }
+};
+
+export default reportWebVitals;
+
+--------------
+11. /home/meo/projects/TimeCapsulesProject/frontend/src/App.test.js
+import { render, screen } from '@testing-library/react';
+import App from './App';
+
+test('renders learn react link', () => {
+  render(<App />);
+  const linkElement = screen.getByText(/learn react/i);
+  expect(linkElement).toBeInTheDocument();
+});
+
+--------------
+12. /home/meo/projects/TimeCapsulesProject/frontend/src/setupTests.js
+// jest-dom adds custom jest matchers for asserting on DOM nodes.
+// allows you to do things like:
+// expect(element).toHaveTextContent(/react/i)
+// learn more: https://github.com/testing-library/jest-dom
+import '@testing-library/jest-dom';
+
+--------------
+13. /home/meo/projects/TimeCapsulesProject/frontend/src/components/CreateCapsule.js
+import React, { useState } from 'react';
+import { web3, EthTimeCapsule, TimeCapsule } from '../web3Setup'; // Import the contract instances
+
+function CreateCapsule() {
+    const [message, setMessage] = useState('');
+    const [amount, setAmount] = useState('');
+    const [unlockDate, setUnlockDate] = useState('');
+    const [network, setNetwork] = useState('ethereum'); // 'ethereum' or 'arbitrum'
+     // Network switch handler
+     const handleNetworkChange = (event) => {
+        setNetwork(event.target.value);
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        const timestampInSeconds = Math.floor(new Date(unlockDate).getTime() / 1000);
+    
+        if (amount > 0) {
+            await EthTimeCapsule.methods.createCapsule(timestampInSeconds).send({
+                from: web3.currentProvider.selectedAddress,
+                value: web3.utils.toWei(amount, "ether")
+            });
+        } else {
+            const timeCapsule = await TimeCapsule.deployed();
+            await timeCapsule.createCapsule(message, timestampInSeconds, {
+                from: web3.currentProvider.selectedAddress
+            });
+        }
+    };
+    return (
+        <div className="create-capsule">
+            <h2 style={{ fontFamily: 'Press Start 2P' }}>Create a Time Capsule</h2>
+            <form onSubmit={handleSubmit}>
+                <div className="input-group">
+                    <label>Message:</label>
+                    <input 
+                        type="text" 
+                        value={message} 
+                        onChange={(e) => setMessage(e.target.value)} 
+                    />
+                </div>
+                <div className="input-group">
+                    <label>Amount (ETH):</label>
+                    <input 
+                        type="number" 
+                        value={amount} 
+                        onChange={(e) => setAmount(e.target.value)} 
+                        placeholder="Enter amount in ETH"
+                    />
+                </div>
+                <div className="input-group">
+                    <label>Unlock Date:</label>
+                    <input 
+                        type="date" 
+                        value={unlockDate} 
+                        onChange={(e) => setUnlockDate(e.target.value)} 
+                    />
+                </div>
+                <button type="submit" className="submit-button">Create Capsule</button>
+            </form>
+        </div>
+    );
+
+}
+
+export default CreateCapsule;
+
+--------------
+14. /home/meo/projects/TimeCapsulesProject/frontend/src/components/ViewCapsules.js
+import React, { useEffect, useState } from 'react';
+import { EthTimeCapsule, web3 } from '../web3Setup'; // Named imports
+
+
+function ViewCapsules() {
+  const [capsules, setCapsules] = useState([]);
+
+  useEffect(() => {
+    const loadCapsules = async () => {
+      const fetchedCapsules = await EthTimeCapsule.methods.getCapsules().call({ from: window.ethereum.selectedAddress });
+      setCapsules(fetchedCapsules);
+    };
+
+    loadCapsules();
+  }, []);
+
+  return (
+    <div>
+      <h2>Your Time Capsules</h2>
+      <ul>
+        {capsules.map((capsule, index) => {
+          const unlockDate = new Date(capsule.unlockTime * 1000);
+          const formattedDate = unlockDate.toLocaleDateString();
+          // Inside the map function
+          const isETHCapsule = capsule.amount !== undefined;
+          const ethAmount = isETHCapsule ? web3.utils.fromWei(capsule.amount, 'ether') : null;
+
+          return (
+            <li key={index}>
+              {isETHCapsule ? (
+                <>
+                  Amount: {ethAmount} ETH, Unlock Date: {formattedDate}, 
+                </>
+              ) : (
+                <>
+                  Message: {capsule.message}, Unlock Date: {formattedDate}
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+export default ViewCapsules;
+
+--------------
