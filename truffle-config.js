@@ -61,11 +61,12 @@ module.exports = {
   networks: {
     sepolia: {
       provider: () => new HDWalletProvider(process.env.MNEMONIC, `https://sepolia.infura.io/v3/${process.env.INFURA_PROJECT_ID}`),
-      network_id: 11155111,
-      gas: 5500000,        // Default gas limit
-      confirmations: 2,    // # of confs to wait between deployments
-      timeoutBlocks: 200,  // # of blocks before a deployment times out
-      skipDryRun: true     // Skip dry run before migrations
+      network_id: 11155111, // Sepolia's network id
+      gas: 5500000, // gas limit
+      confirmations: 2,
+      timeoutBlocks: 200,
+      skipDryRun: true,
+      networkCheckTimeout: 10000,
     },
     arbitrumSepolia: {
       provider: () => new HDWalletProvider(process.env.MNEMONIC, `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_PROJECT_ID}`),
@@ -76,9 +77,9 @@ module.exports = {
       skipDryRun: true
     },
     development: {
-      host: "127.0.0.1",     // Localhost
-      port: 7545,            // Standard port for Ganache
-      network_id: "*",       // Match any network
+      host: "127.0.0.1",
+      port: 8545, // Default port for Ganache CLI
+      network_id: "*", // Match any network ID
     },
 
     // Useful for testing. The `development` name is special - truffle uses it by default
@@ -129,7 +130,7 @@ module.exports = {
   // Configure your compilers
   compilers: {
     solc: {
-      version: "0.8.21",      // Fetch exact version from solc-bin (default: truffle's version)
+      version: "0.5.1",      // Fetch exact version from solc-bin (default: truffle's version)
       // docker: true,        // Use "0.5.1" you've installed locally with docker (default: false)
       // settings: {          // See the solidity docs for advice about optimization and evmVersion
       //  optimizer: {

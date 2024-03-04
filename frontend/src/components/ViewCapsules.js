@@ -1,47 +1,61 @@
 import React, { useEffect, useState } from 'react';
-import { EthTimeCapsule, web3 } from '../web3Setup'; // Named imports
-
+import { web3, timeCapsuleContract } from '../web3Setup';
 
 function ViewCapsules() {
-  const [capsules, setCapsules] = useState([]);
+    const [capsules, setCapsules] = useState([]);
 
-  useEffect(() => {
-    const loadCapsules = async () => {
-      const fetchedCapsules = await EthTimeCapsule.methods.getCapsules().call({ from: window.ethereum.selectedAddress });
-      setCapsules(fetchedCapsules);
-    };
+    useEffect(() => {
+      const loadCapsules = async () => {
+          try {
+              const accounts = await web3.eth.getAccounts();
+              const fetchedCapsules = await timeCapsuleContract.methods.getCapsules().call({ from: accounts[0] });
 
-    loadCapsules();
+              const formattedCapsules = fetchedCapsules.map((capsule) => {
+                  const creationDate = new Date(capsule.creationTime * 1000).toLocaleString();
+                  const unlockDate = new Date(capsule.unlockTime * 1000).toLocaleString();
+                  const isEthCapsule = capsule.amount && capsule.amount !== '0';
+
+                  return {
+                      ...capsule,
+                      creationDate, 
+                      unlockDate,
+                      isEthCapsule,
+                  };
+              });
+
+              setCapsules(formattedCapsules);
+          } catch (error) {
+              console.error('Error fetching capsules:', error);
+          }
+      };
+
+      loadCapsules();
   }, []);
 
-  return (
-    <div>
-      <h2>Your Time Capsules</h2>
-      <ul>
-        {capsules.map((capsule, index) => {
-          const unlockDate = new Date(capsule.unlockTime * 1000);
-          const formattedDate = unlockDate.toLocaleDateString();
-          // Inside the map function
-          const isETHCapsule = capsule.amount !== undefined;
-          const ethAmount = isETHCapsule ? web3.utils.fromWei(capsule.amount, 'ether') : null;
-
-          return (
-            <li key={index}>
-              {isETHCapsule ? (
-                <>
-                  Amount: {ethAmount} ETH, Unlock Date: {formattedDate}, 
-                </>
-              ) : (
-                <>
-                  Message: {capsule.message}, Unlock Date: {formattedDate}
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+    return (
+        <div className="view-capsules">
+            <h2>Your Time Capsules</h2>
+            <ul>
+                {capsules.map((capsule, index) => (
+                    <li key={index}>
+                        {capsule.isEthCapsule ? (
+                            <>
+                                <p>Amount: {web3.utils.fromWei(capsule.amount, 'ether')} ETH</p>
+                                <p>Created: {capsule.creationDate}</p>
+                                <p>Unlock Date: {capsule.unlockDate}</p>
+                            </>
+                        ) : (
+                            <>
+                                <p>Message: {capsule.message}</p>
+                                <p>Created: {capsule.creationDate}</p>
+                                <p>Unlock Date: {capsule.unlockDate}</p>
+                            </>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
 }
 
 export default ViewCapsules;
